@@ -1,0 +1,195 @@
+version: "3.9"
+
+# ========================================
+# NETWORKS
+# ========================================
+networks:
+  traefik-public:
+    external: true
+  internal:
+    driver: overlay
+
+# ========================================
+# SERVICES
+# ========================================
+services:
+
+  # ----------------------------------------
+  #  TRAEFIK (Reverse Proxy / Load Balancer)
+  # ----------------------------------------
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./acme.json:/acme.json
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - traefik-public
+
+  # ----------------------------------------
+  #     GATEWAY SERVICE (FastAPI)
+  # ----------------------------------------
+  gateway-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:${IMAGE_TAG}
+    networks:
+      - traefik-public
+      - internal
+    deploy:
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.gateway.rule=Host(`gateway.localhost`)"
+        - "traefik.http.services.gateway.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #   AUTH SERVICE
+  # ----------------------------------------
+  auth-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:${IMAGE_TAG}
+    networks:
+      - internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.auth.rule=Host(`auth.localhost`)"
+        - "traefik.http.services.auth.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #   PROJECT SERVICE
+  # ----------------------------------------
+  project-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:${IMAGE_TAG}
+    networks:
+      - internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.project.rule=Host(`project.localhost`)"
+        - "traefik.http.services.project.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #   BILLING SERVICE
+  # ----------------------------------------
+  billing-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:${IMAGE_TAG}
+    networks:
+      - internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.billing.rule=Host(`billing.localhost`)"
+        - "traefik.http.services.billing.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #   NOTIFICATION SERVICE
+  # ----------------------------------------
+  notification-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:${IMAGE_TAG}
+    networks:
+      - internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.notification.rule=Host(`notification.localhost`)"
+        - "traefik.http.services.notification.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #    ANALYTICS SERVICE
+  # ----------------------------------------
+  analytics-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:${IMAGE_TAG}
+    networks:
+      - internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.analytics.rule=Host(`analytics.localhost`)"
+        - "traefik.http.services.analytics.loadbalancer.server.port=8000"
+
+  # ----------------------------------------
+  #   KAFKA (Bitnami)
+  # ----------------------------------------
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - internal
+    deploy:
+      replicas: 1
+
+  kafka:
+    image: bitnami/kafka:latest
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    networks:
+      - internal
+    deploy:
+      replicas: 1
+    depends_on:
+      - zookeeper
+
+  # ----------------------------------------
+  #   JAEGER (OpenTelemetry backend)
+  # ----------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - internal
+
+  # ----------------------------------------
+  #   PROMETHEUS
+  # ----------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - internal
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  # ----------------------------------------
+  #   GRAFANA
+  # ----------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    networks:
+      - internal
+    ports:
+      - "3000:3000"
