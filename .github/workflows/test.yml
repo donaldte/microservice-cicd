@@ -77,7 +77,13 @@ jobs:
           docker compose -f docker-compose.tests.yml up --build -d
 
           echo "Attente que tout soit prêt (Kafka, etc.)..."
-          sleep 20   # ou remplace par un wait script plus intelligent si tu veux
+          
+          echo "Attente que le gateway réponde sur le port 8080..."
+          timeout 60s bash -c '
+            until curl -f http://localhost:8005/health >/dev/null 2>&1; do
+              echo "Gateway pas encore prêt, nouvelle tentative..."
+              sleep 2
+            done
 
           echo "État du stack :"
           docker compose -f docker-compose.tests.yml ps
