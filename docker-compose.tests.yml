@@ -55,7 +55,7 @@ services:
 
   # Kafka KRaft
   kafka-test:
-    image: bitnami/kafka:latest
+    image: bitnami/kafka
     hostname: kafka-test
     ports:
       - "9092:9092"
