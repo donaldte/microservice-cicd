@@ -109,7 +109,7 @@ services:
   # KAFKA KRaft (3 nœuds – sans Zookeeper !)
   # ========================================
   kafka-1:
-    image: bitnami/kafka:3.8.0
+    image: bitnami/kafka
     hostname: kafka-1
     environment:
       - KAFKA_ENABLE_KRAFT=yes
