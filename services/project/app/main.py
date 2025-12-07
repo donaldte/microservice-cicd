@@ -16,6 +16,7 @@ class Task(BaseModel):
 fake_tasks_db: List[Task] = [
     Task(id=1, title="Créer la structure du projet", done=True),
     Task(id=2, title="Écrire les services FastAPI", done=False),
+    Task(id=3, title="Écrire les tests unitaires", done=False),
 ]
 
 
