@@ -71,7 +71,7 @@ jobs:
 
       # Notification Slack (toujours envoyée, même si SSH échoue)
       - name: Envoyer notification Slack du déploiement
-        uses: ./.github/workflows/reusable/slack-notify.yml
+        uses: ./.github/workflows/slack-notify.yml
         if: always()                                     # même si le SSH a planté
         with:
           status: success

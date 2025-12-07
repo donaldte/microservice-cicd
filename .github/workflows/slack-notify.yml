@@ -1,4 +1,4 @@
-# .github/workflows/reusable/slack-notify.yml
+# .github/workflows/slack-notify.yml
 # =============================================================
 # Workflow réutilisable : envoi d’une notification Slack jolie
 #
@@ -9,7 +9,7 @@
 #   • cd-rollback.yml     → rollback manuel
 #
 # Comment l’appeler depuis un autre workflow ?
-#   uses: ./.github/workflows/reusable/slack-notify.yml
+#   uses: ./.github/workflows/slack-notify.yml
 #   with:
 #     status: success | failure | warning | info
 #     title:  "Mon super message"

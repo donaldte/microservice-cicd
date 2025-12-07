@@ -1,4 +1,4 @@
-# .github/workflows/reusable/test.yml
+# .github/workflows/test.yml
 # =============================================================
 # Workflow réutilisable : exécute TOUS les tests du projet
 # → Unit tests + Coverage + Integration tests avec Docker Compose

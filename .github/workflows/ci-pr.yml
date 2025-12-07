@@ -79,7 +79,7 @@ jobs:
   tests:
     needs: detect-services
     if: needs.detect-services.outputs.has_changes == 'true' || github.event.pull_request.draft == true
-    uses: ./.github/workflows/reusable/test.yml
+    uses: ./.github/workflows/test.yml
     secrets: inherit
 
   # =============================================================
@@ -88,7 +88,7 @@ jobs:
   slack-failure:
     needs: tests
     if: failure()
-    uses: ./.github/workflows/reusable/slack-notify.yml
+    uses: ./.github/workflows/slack-notify.yml
     with:
       status: failure
       title: "PR #${{ github.event.pull_request.number }} échouée"

@@ -1,4 +1,4 @@
-# .github/workflows/reusable/build-and-push.yml
+# .github/workflows/build-and-push.yml
 # =============================================================
 # Workflow réutilisable : Build + Push + Scan de sécurité d’un service
 #

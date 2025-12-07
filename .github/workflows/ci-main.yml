@@ -82,7 +82,7 @@ jobs:
       max-parallel: 4
 
     # Réutilise notre workflow propre et sécurisé
-    uses: ./.github/workflows/reusable/build-and-push.yml
+    uses: ./.github/workflows/build-and-push.yml
     with:
       service: ${{ matrix.service }}       # ex: "auth", "gateway", etc.
     secrets: inherit                       # DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, etc.
@@ -93,7 +93,7 @@ jobs:
   slack-success:
     needs: [detect-changes, build-push]
     if: success() && needs.detect-changes.outputs.matrix.service.length > 0
-    uses: ./.github/workflows/reusable/slack-notify.yml
+    uses: ./.github/workflows/slack-notify.yml
     with:
       status: success
       title: "Images Docker mises à jour"
@@ -107,7 +107,7 @@ jobs:
   slack-noop:
     needs: detect-changes
     if: success() &&  needs.detect-changes.outputs.matrix.service.length == 0
-    uses: ./.github/workflows/reusable/slack-notify.yml
+    uses: ./.github/workflows/slack-notify.yml
     with:
       status: info
       title: "Aucun service à build"
