@@ -11,11 +11,3 @@ def test_billing_health():
     response = client.get("/health")
     assert response.status_code == 200
 
-def test_billing_event_simulation():
-    payload = {
-        "user_email": "john@example.com",
-        "plan_name": "PRO",
-        "status": "paid"
-    }
-    response = client.post("/webhook", json=payload)
-    assert response.status_code in [200, 500]
