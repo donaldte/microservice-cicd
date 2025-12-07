@@ -46,7 +46,7 @@ services:
       - kafka-test
 
   kafka-test:
-    image: bitnami/kafka:latest
+    image: bitnami/kafka:3.6
     environment:
       - ALLOW_PLAINTEXT_LISTENER=yes
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
