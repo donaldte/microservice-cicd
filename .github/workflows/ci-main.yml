@@ -39,34 +39,36 @@ jobs:
       # Étape magique : détecte TOUS les dossiers dans services/ automatiquement
       - name: Détecter les services modifiés (100 % dynamique)
         id: detect
-        run: |
-          # 1. Récupère tous les fichiers modifiés entre HEAD~1 et HEAD
-          #    Exemple : services/auth/app.py → on extrait "auth"
-          CHANGED_SERVICES=$(
-            git diff --name-only HEAD~1 HEAD \
-              | grep '^services/' \
-              | cut -d/ -f2 \
-              | grep -v '^shared$' \    # on ignore le dossier shared seul
-              | sort -u
-          )
+        run:
+          echo "TODO"
+        # run: |
+        #   # 1. Récupère tous les fichiers modifiés entre HEAD~1 et HEAD
+        #   #    Exemple : services/auth/app.py → on extrait "auth"
+        #   CHANGED_SERVICES=$(
+        #     git diff --name-only HEAD~1 HEAD \
+        #       | grep '^services/' \
+        #       | cut -d/ -f2 \
+        #       | grep -v '^shared$' \    # on ignore le dossier shared seul
+        #       | sort -u
+        #   )
 
-          # 2. Si rien n’a changé dans services/ → on skip le build
-          if [ -z "$CHANGED_SERVICES" ]; then
-            echo "Aucun service modifié → pas de build"
-            echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
-            echo "list=Aucun" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+        #   # 2. Si rien n’a changé dans services/ → on skip le build
+        #   if [ -z "$CHANGED_SERVICES" ]; then
+        #     echo "Aucun service modifié → pas de build"
+        #     echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
+        #     echo "list=Aucun" >> $GITHUB_OUTPUT
+        #     exit 0
+        #   fi
 
-          # 3. Formate pour la matrix GitHub (obligatoire pour strategy.matrix)
-          MATRIX=$(echo "$CHANGED_SERVICES" | jq -R . | jq -s '{service: .}')
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+        #   # 3. Formate pour la matrix GitHub (obligatoire pour strategy.matrix)
+        #   MATRIX=$(echo "$CHANGED_SERVICES" | jq -R . | jq -s '{service: .}')
+        #   echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-          # 4. Formate une liste lisible pour Slack
-          LIST=$(echo "$CHANGED_SERVICES" | tr '\n' ',' | sed 's/,/, /g; s/, $//')
-          echo "list=$LIST" >> $GITHUB_OUTPUT
+        #   # 4. Formate une liste lisible pour Slack
+        #   LIST=$(echo "$CHANGED_SERVICES" | tr '\n' ',' | sed 's/,/, /g; s/, $//')
+        #   echo "list=$LIST" >> $GITHUB_OUTPUT
 
-          echo "Services détectés : $LIST"
+        #   echo "Services détectés : $LIST"
 
   # =============================================================
   # 2. Build & Push uniquement les services détectés
