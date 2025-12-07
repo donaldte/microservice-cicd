@@ -1,4 +1,3 @@
-````markdown
 # 🔐 Configuration des Variables & Secrets GitHub Actions
 
 Ce projet utilise **GitHub Actions** pour :

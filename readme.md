@@ -1,5 +1,4 @@
 
-````markdown
 # 🌐 CloudTaskHub – Microservices & DevOps Architecture
 
 CloudTaskHub est une architecture microservices complète construite avec FastAPI, Kafka, Docker Swarm, Traefik, OpenTelemetry, Jaeger, Prometheus, Grafana et un pipeline CI/CD GitHub Actions production-ready.
