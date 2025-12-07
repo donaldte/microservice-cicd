@@ -112,8 +112,21 @@ docker network create --driver=overlay traefik-public
 Traefik a besoin d’un fichier ACME pour gérer les certificats HTTPS :
 
 ```bash
-sudo touch /var/data/traefik/acme.json
-sudo chmod 600 /var/data/traefik/acme.json
+# 1. Une seule fois
+mkdir -p /opt/cloudtaskhub /var/data/traefik
+touch /var/data/traefik/acme.json && chmod 600 /var/data/traefik/acme.json
+
+# 2. Copie le fichier ci-dessus → /opt/cloudtaskhub/docker-compose.prod.yml
+
+# 3. Crée le .env
+cat > /opt/cloudtaskhub/.env <<EOF
+DOCKERHUB_USERNAME=donald284
+IMAGE_TAG=latest
+EOF
+
+# 4. Déploie
+cd /opt/cloudtaskhub
+docker stack deploy -c docker-compose.prod.yml cloudtaskhub
 ```
 
 (Sur ton projet local : `acme.json` doit aussi exister.)

@@ -1,91 +1,115 @@
+# .github/workflows/ci-main.yml
+# =============================================================
+# CI - Build & Push intelligent sur la branche main
+# → Ne build QUE les services qui ont changé depuis le dernier commit
+# → Totalement dynamique : tu ajoutes un service → ça marche direct
+# =============================================================
+
 name: CI - Main Build & Push
 
+# Se déclenche à chaque push sur main (merge PR, commit direct, etc.)
 on:
   push:
     branches: [ main ]
 
-env:
-  SERVICES: |
-    gateway
-    auth
-    project
-    billing
-    notification
-    analytics
-  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+# Évite 10 builds en parallèle si tu pousses 5 commits d’un coup
+concurrency:
+  group: ci-main
+  cancel-in-progress: true
 
 jobs:
 
-  build:
+  # =============================================================
+  # 1. Détecter automatiquement quels services ont changé
+  #    (sans lister manuellement gateway/auth/etc.)
+  # =============================================================
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}        # → format matrix pour GitHub
+      changed_services: ${{ steps.detect.outputs.list }} # → pour Slack (liste lisible)
 
     steps:
-
-      - name: Checkout
+      # Récupère le commit actuel + le précédent (fetch-depth: 2)
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          fetch-depth: 2
 
-      - name: Install dependencies
+      # Étape magique : détecte TOUS les dossiers dans services/ automatiquement
+      - name: Détecter les services modifiés (100 % dynamique)
+        id: detect
         run: |
-          pip install -r requirements.txt
-          pip install pytest trivy
+          # 1. Récupère tous les fichiers modifiés entre HEAD~1 et HEAD
+          #    Exemple : services/auth/app.py → on extrait "auth"
+          CHANGED_SERVICES=$(
+            git diff --name-only HEAD~1 HEAD \
+              | grep '^services/' \
+              | cut -d/ -f2 \
+              | grep -v '^shared$' \    # on ignore le dossier shared seul
+              | sort -u
+          )
 
-      - name: Run unit tests
-        run: pytest tests/unit
+          # 2. Si rien n’a changé dans services/ → on skip le build
+          if [ -z "$CHANGED_SERVICES" ]; then
+            echo "Aucun service modifié → pas de build"
+            echo "matrix={\"service\":[]}" >> $GITHUB_OUTPUT
+            echo "list=Aucun" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
-      - name: Run integration tests
-        run: |
-          docker compose -f docker-compose.tests.yml up --build --abort-on-container-exit
-          docker compose -f docker-compose.tests.yml down
+          # 3. Formate pour la matrix GitHub (obligatoire pour strategy.matrix)
+          MATRIX=$(echo "$CHANGED_SERVICES" | jq -R . | jq -s '{service: .}')
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # 4. Formate une liste lisible pour Slack
+          LIST=$(echo "$CHANGED_SERVICES" | tr '\n' ',' | sed 's/,/, /g; s/, $//')
+          echo "list=$LIST" >> $GITHUB_OUTPUT
 
-      - name: Build & Push Images
-        run: |
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          echo "Services détectés : $LIST"
 
-          for SERVICE in $SERVICES; do
-            IMAGE="${DOCKERHUB_NAMESPACE}/cloudtaskhub-${SERVICE}"
+  # =============================================================
+  # 2. Build & Push uniquement les services détectés
+  # =============================================================
+  build-push:
+    needs: detect-changes
+    # Si matrix est vide → ce job est sauté automatiquement
+    if: needs.detect-changes.outputs.matrix.service.length > 0
 
-            echo "Building $SERVICE..."
-            docker build \
-              -t ${IMAGE}:latest \
-              -t ${IMAGE}:${SHORT_SHA} \
-              ./services/${SERVICE}
+    # Build en parallèle de tous les services modifiés
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      max-parallel: 4
 
-            echo "Scanning image with Trivy..."
-            trivy image ${IMAGE}:latest
+    # Réutilise notre workflow propre et sécurisé
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      service: ${{ matrix.service }}       # ex: "auth", "gateway", etc.
+    secrets: inherit                       # DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, etc.
 
-            echo "Pushing $IMAGE..."
-            docker push ${IMAGE}:latest
-            docker push ${IMAGE}:${SHORT_SHA}
-          done
+  # =============================================================
+  # 3. Notification Slack uniquement si on a buildé quelque chose
+  # =============================================================
+  slack-success:
+    needs: [detect-changes, build-push]
+    if: success() && needs.detect-changes.outputs.matrix.service.length > 0
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: success
+      title: "Images Docker mises à jour"
+      message: |
+        Services buildés : **${{ needs.detect-changes.outputs.changed_services }}**
+        Commit : ${{ github.sha }}
+        Par : ${{ github.actor }}
+    secrets: inherit
 
-      - name: Slack notify failure
-        if: failure()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_COLOR: "#ff0000"
-          SLACK_TITLE: "❌ MAIN BUILD FAILED"
-          SLACK_MESSAGE: |
-            Build failed for commit ${{ github.sha }}
-
-      - name: Slack notify success
-        if: success()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_COLOR: "#36a64f"
-          SLACK_TITLE: "✅ MAIN BUILD SUCCESS"
-          SLACK_MESSAGE: |
-            Docker images pushed successfully.
-            Commit: ${{ github.sha }}
+  # Optionnel : notification si RIEN n’a été buildé (ex: juste README modifié)
+  slack-noop:
+    needs: detect-changes
+    if: success() &&  needs.detect-changes.outputs.matrix.service.length == 0
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: info
+      title: "Aucun service à build"
+      message: "Seuls des fichiers non-critiques ont changé (README, docs, etc.)"
+    secrets: inherit

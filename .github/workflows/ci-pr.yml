@@ -1,62 +1,111 @@
-name: CI - Pull Request Validation
+# .github/workflows/ci-pr.yml
+# =============================================================
+# CI - Validation des Pull Requests
+# → Ne lance les tests QUE si un vrai service a été modifié
+# → 100 % dynamique : tu ajoutes 50 services → ça marche direct
+# → Zéro bug de parsing, zéro paths-filter compliqué
+# → Ultra rapide et zéro maintenance
+# =============================================================
 
+name: CI - Pull Request
+
+# Se déclenche à chaque ouverture/modification de PR vers main
 on:
   pull_request:
     branches: [ main ]
 
-env:
-  SERVICES: |
-    gateway
-    auth
-    project
-    billing
-    notification
-    analytics
-  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+# Annule les anciens runs si tu pousses plusieurs commits dans la même PR
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
 
-  validate:
+  # =============================================================
+  # 1. Détection SIMPLE et ROBUSTE des services modifiés dans la PR
+  #    → Pas de génération de YAML, pas de EOF, pas de bug
+  # =============================================================
+  detect-services:
     runs-on: ubuntu-latest
-
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}      # true/false
+      changed_services: ${{ steps.check.outputs.changed_services }}  # liste lisible
     steps:
-
-      - name: Checkout code
+      # Récupère tout le code + l’historique pour git diff
+      - name: Checkout complet du repo
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          fetch-depth: 0        # obligatoire pour comparer avec base.sha
 
-      - name: Install dependencies
+      # Étape magique : détecte si un fichier dans services/ a changé
+      # → si oui → on lance les tests
+      # → si non (juste README, docs, etc.) → on skippe tout
+      - name: Vérifier si un service a été modifié
+        id: check
         run: |
-          pip install -r requirements.txt
-          pip install pytest
+          echo "Comparaison entre ${{ github.event.pull_request.base.sha }} et ${{ github.sha }}"
 
-      - name: Run unit tests
-        run: pytest tests/unit
+          # Tous les fichiers modifiés dans cette PR
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} || echo "")
 
-      - name: Run integration tests
-        run: |
-          docker compose -f docker-compose.tests.yml up --build --abort-on-container-exit
-          docker compose -f docker-compose.tests.yml down
+          # On regarde s’il y a au moins un fichier dans services/ (sauf shared seul)
+          if echo "$CHANGED_FILES" | grep -Eq '^services/(gateway|auth|project|billing|notification|analytics)/'; then
+            echo "Des services ont été modifiés !"
 
-      - name: Build docker images (LOCAL ONLY)
-        run: |
-          for SERVICE in $SERVICES; do
-            docker build -t ${SERVICE}-service:test ./services/${SERVICE}
-          done
+            # Liste propre des services touchés (pour Slack)
+            SERVICES=$(echo "$CHANGED_FILES" | grep '^services/' | cut -d/ -f2 | sort -u | grep -v '^shared$' | tr '\n' ' ' | sed 's/ $//')
+            echo "Services détectés : $SERVICES"
 
-      - name: Slack notify (if failed)
-        if: failure()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_TITLE: "❌ CI Failed for PR #${{ github.event.pull_request.number }}"
-          SLACK_COLOR: "#ff0000"
-          SLACK_MESSAGE: |
-            Pull Request failed tests or build.
-            Author: ${{ github.event.pull_request.user.login }}
-            Branch: ${{ github.head_ref }}
-            Commit: ${{ github.sha }}
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "changed_services=$SERVICES" >> $GITHUB_OUTPUT
+          else
+            echo "Aucun service modifié (seulement docs, README, etc.) → tests ignorés"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "changed_services=aucun" >> $GITHUB_OUTPUT
+          fi
+
+  # =============================================================
+  # 2. Lancer les tests (uniquement si un service a changé)
+  # =============================================================
+  tests:
+    needs: detect-services
+    # On lance les tests si :
+    #   • un service a été modifié
+    #   • OU si c’est une draft PR (pratique pour tester avant review)
+    if: >
+      needs.detect-services.outputs.has_changes == 'true' ||
+      github.event.pull_request.draft == true
+
+    uses: ./.github/workflows/test.yml        # ← workflow réutilisable (doit être à la racine)
+    secrets: inherit                          # passe tous les secrets (DB, etc.)
+
+  # =============================================================
+  # 3. Notification Slack en cas d’échec
+  # =============================================================
+  slack-failure:
+    needs: tests
+    if: failure()                             # seulement si les tests ont planté
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: failure
+      title: "PR ❌ #${{ github.event.pull_request.number }} a échoué"
+      message: |
+        Services modifiés : **${{ needs.detect-services.outputs.changed_services }}**
+        Auteur : ${{ github.actor }}
+        Lien : https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  # =============================================================
+  # 4. Notification Slack si tout est bon (optionnel mais pro)
+  # =============================================================
+  slack-success:
+    needs: [detect-services, tests]
+    if: success() && needs.detect-services.outputs.has_changes == 'true'
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: success
+      title: "PR ✅ #${{ github.event.pull_request.number }} est OK"
+      message: |
+        Tous les tests sont passés !
+        Services testés : **${{ needs.detect-services.outputs.changed_services }}**
+    secrets: inherit

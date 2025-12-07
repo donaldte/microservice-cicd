@@ -1,0 +1,179 @@
+# docker-compose.prod.yml
+# =============================================================
+# Stack PRODUCTION – SANS KAFKA (0% dépendance externe)
+# → Fonctionne à 100 % avec juste ton IP publique
+# → HTTPS auto, zero-downtime, observabilité complète
+# → Idéal pour MVP, staging ou prod stable sans complexité Kafka
+#
+# Accès après déploiement :
+#   API → https://TON_IP_PUBLIQUE
+#   Traefik Dashboard → https://TON_IP_PUBLIQUE:8080
+#   Jaeger → http://TON_IP_PUBLIQUE:16686
+#   Grafana → http://TON_IP_PUBLIQUE:3000
+#   Prometheus → http://TON_IP_PUBLIQUE:9090
+#
+# Commandes (une seule fois sur le serveur) :
+#   mkdir -p /opt/cloudtaskhub /var/data/traefik
+#   touch /var/data/traefik/acme.json && chmod 600 /var/data/traefik/acme.json
+#   docker network create traefik-public
+#   cd /opt/cloudtaskhub
+#   # copie ce fichier + .env puis :
+#   docker stack deploy -c docker-compose.prod.yml cloudtaskhub
+#
+# Fichier .env (sur le serveur) :
+#   DOCKERHUB_USERNAME=tonusername
+#   IMAGE_TAG=latest
+# =============================================================
+
+networks:
+  traefik-public:
+    external: true
+  internal:
+    driver: overlay
+    attachable: true
+
+services:
+
+  # ========================================
+  # TRAEFIK v3 – Reverse proxy + HTTPS auto (Let's Encrypt)
+  # ========================================
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=donaldtedom0@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--log.level=INFO"
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+      - target: 443
+        published: 443
+        mode: host
+      - target: 8080
+        published: 8080
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/data/traefik/acme.json:/acme.json
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.dashboard.rule=HostRegexp(`{host:.+}`) && PathPrefix(`/dashboard`)"
+        - "traefik.http.routers.dashboard.service=api@internal"
+        - "traefik.http.routers.dashboard.entrypoints=websecure"
+        - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+    networks:
+      - traefik-public
+
+  # ========================================
+  # API GATEWAY – Point d’entrée public
+  # ========================================
+  gateway-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:${IMAGE_TAG:-latest}
+    environment:
+      # On désactive Kafka en prod si tu ne l'utilises pas encore
+      - KAFKA_ENABLED=false
+      - TEST_MODE=false
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
+        - "traefik.http.routers.gateway.entrypoints=websecure"
+        - "traefik.http.routers.gateway.tls.certresolver=myresolver"
+        - "traefik.http.services.gateway.loadbalancer.server.port=8000"
+    networks:
+      - traefik-public
+      - internal
+
+  # ========================================
+  # MICRO-SERVICES (internes uniquement)
+  # ========================================
+  auth-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_ENABLED=false
+    deploy:
+      replicas: 2
+    networks:
+      - internal
+
+  project-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_ENABLED=false
+    deploy:
+      replicas: 2
+    networks:
+      - internal
+
+  billing-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_ENABLED=false
+    deploy:
+      replicas: 2
+    networks:
+      - internal
+
+  notification-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_ENABLED=false
+    deploy:
+      replicas: 2
+    networks:
+      - internal
+
+  analytics-service:
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_ENABLED=false
+    deploy:
+      replicas: 2
+    networks:
+      - internal
+
+  # ========================================
+  # OBSERVABILITÉ (directement accessible)
+  # ========================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    ports:
+      - "16686:16686"
+    networks:
+      - internal
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - internal
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - internal

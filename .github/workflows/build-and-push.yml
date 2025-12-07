@@ -1,0 +1,106 @@
+# .github/workflows/build-and-push.yml
+# =============================================================
+# Workflow réutilisable : Build + Push + Scan de sécurité d’un service
+#
+# Appelé automatiquement par ci-main.yml pour chaque service modifié
+# Exemple : service = "auth" → build cloudtaskhub-auth
+#
+# Ce qu’il fait :
+# 1. Checkout du code
+# 2. Génère les tags intelligents (latest + SHA court)
+# 3. Login Docker Hub
+# 4. Build + push avec cache ultra-rapide (inline + registry)
+# 5. Scan de sécurité avec Trivy (bloquant sur CRITICAL/HIGH)
+#
+# Secrets obligatoires :
+#   DOCKERHUB_USERNAME → ton username Docker Hub
+#   DOCKERHUB_TOKEN    → Personal Access Token (pas le mot de passe !)
+# =============================================================
+
+name: Build & Push
+
+# Ce workflow est appelé par d’autres workflows (ci-main.yml)
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Nom du service à build (ex: auth, gateway, billing, etc.)"
+        required: true
+        type: string
+
+    # Secrets transmis automatiquement depuis le workflow parent
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: "Build & Push → cloudtaskhub-${{ inputs.service }}"
+
+    steps:
+      # 1. Récupère tout le code source
+      - name: Checkout du code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # nécessaire pour le tag SHA correct
+
+      # 2. Génère automatiquement les tags Docker
+      #    → latest (seulement sur main)
+      #    → a1b2c3d (SHA court du commit)
+      - name: Générer les métadonnées Docker (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ inputs.service }}
+          flavor: |
+            latest=auto                     # latest seulement sur main
+          tags: |
+            type=sha,prefix=,format=short   # → a1b2c3d
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # 3. Connexion à Docker Hub
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Build + Push avec cache ultra-rapide (gain de 80-90% de temps)
+      - name: Build & Push l’image Docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/${{ inputs.service }}      # dossier du service
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}           # latest + SHA
+          labels: ${{ steps.meta.outputs.labels }}
+          
+          # Cache ultra-efficace :
+          # → réutilise les layers de l’image latest existante
+          # → sauvegarde le cache dans l’image elle-même (inline)
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ inputs.service }}:latest
+          cache-to: type=inline,mode=max
+
+          # Buildx = multi-platforme si besoin (arm64 + amd64)
+          platforms: linux/amd64
+
+      # 5. Scan de sécurité bloquant (CRITICAL/HIGH = CI échoue)
+      - name: Scan de vulnérabilités avec Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ inputs.service }}:latest
+          format: table
+          exit-code: 1                     # échoue si CRITICAL ou HIGH trouvées
+          ignore-unfixed: true             # ignore les CVE sans correctif
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          timeout: 5m
+
+      # Bonus : message clair dans les logs GitHub
+      - name: Confirmation finale
+        run: |
+          echo "Build & push terminé avec succès"
+          echo "Images disponibles :"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/  → /'

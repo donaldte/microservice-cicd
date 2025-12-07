@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 app = FastAPI(title="Auth Service")
 
+Instrumentator().instrument(app).expose(app)   
 
 class UserRegister(BaseModel):
     email: str
@@ -36,6 +37,3 @@ def login(credentials: UserLogin):
     }
 
 
-@app.on_event("startup")
-async def _startup():
-    Instrumentator().instrument(app).expose(app)

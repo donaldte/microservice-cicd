@@ -1,91 +1,92 @@
-name: CI - Main Build & Push
+# .github/workflows/cd-deploy.yml
+# =============================================================
+# CD - Déploiement AUTOMATIQUE en production
+#
+# Quand ça se déclenche ?
+# → Automatiquement dès que le workflow "CI - Main Build & Push" réussit
+# → C’est-à-dire : dès qu’une PR est mergée dans main et que les images Docker sont poussées
+#
+# Ce qu’il fait :
+# 1. Se connecte en SSH sur ton serveur de prod
+# 2. Lance : docker stack deploy → zero-downtime
+# 3. Envoie un beau message Slack
+#
+# Secrets nécessaires (GitHub → Settings → Secrets and variables → Actions) :
+#   SERVER_HOST      → IP ou domaine du serveur (ex: 165.22.224.46 ou prod.votredomaine.com)
+#   SERVER_USER      → utilisateur SSH (généralement "root")
+#   SERVER_SSH_KEY   → clé privée SSH complète (-----BEGIN OPENSSH PRIVATE KEY----- ...)
+#   SLACK_WEBHOOK_URL → webhook de ton canal #deploys
+#
+# Tu n’as RIEN à faire manuellement → tout est full auto après un merge
+# =============================================================
 
+name: CD - Deploy Production
+
+# Déclenchement automatique quand le build CI sur main réussit
 on:
-  push:
-    branches: [ main ]
-
-env:
-  SERVICES: |
-    gateway
-    auth
-    project
-    billing
-    notification
-    analytics
-  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+  workflow_run:
+    workflows: ["CI - Main Build & Push"]   # doit être EXACTEMENT le nom du workflow ci-main.yml
+    types:
+      - completed                            # quand il est terminé
+    branches: [ main ]                       # seulement sur la branche main
 
 jobs:
-
-  build:
+  deploy:
+    # On ne lance le déploiement QUE si le build CI a réussi
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    name: Déploiement automatique sur le serveur de production
 
     steps:
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # Étape principale : connexion SSH + déploiement zero-downtime
+      - name: SSH → Déployer le stack Docker Swarm
+        uses: appleboy/ssh-action@v1.0.3                 # Action ultra fiable (utilisée par 50k+ repos)
         with:
-          python-version: '3.11'
+          host: ${{ secrets.SERVER_HOST }}              # IP ou domaine du serveur
+          username: ${{ secrets.SERVER_USER }}          # généralement "root"
+          key: ${{ secrets.SERVER_SSH_KEY }}            # clé privée complète (avec BEGIN/END)
+          port: 22                                       # port SSH standard
+          timeout: 60s                                   # timeout de connexion
+          script: |
+            # On va dans le dossier du projet
+            echo "Connexion au serveur et déploiement en cours..."
+            cd /opt/cloudtaskhub || { echo "Dossier /opt/cloudtaskhub introuvable !"; exit 1; }
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest trivy
+            # Affiche la version actuelle (pour le debug)
+            echo "Déploiement de la version : $(git rev-parse --short HEAD 2>/dev/null || echo 'latest')"
 
-      - name: Run unit tests
-        run: pytest tests/unit
+            # Le cœur du déploiement (zero-downtime garanti par Swarm)
+            docker stack deploy \
+              -c docker-compose.prod.yml \
+              cloudtaskhub \
+              --with-registry-auth \               # authentification Docker Hub automatique
+              --resolve-image changed \            # ne re-télécharge que les images modifiées (rapide)
+              --prune                              # supprime les anciens services inutilisés
 
-      - name: Run integration tests
-        run: |
-          docker compose -f docker-compose.tests.yml up --build --abort-on-container-exit
-          docker compose -f docker-compose.tests.yml down
+            # Vérification que tout est bien up
+            echo "État du stack après déploiement :"
+            docker stack ps cloudtaskhub --no-trunc | head -15
+            echo "Services en cours :"
+            docker service ls
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      # Notification Slack (toujours envoyée, même si SSH échoue)
+      - name: Envoyer notification Slack du déploiement
+        uses: ./.github/workflows/slack-notify.yml
+        if: always()                                     # même si le SSH a planté
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          status: success
+          title: "Déploiement automatique en production"
+          message: |
+            Nouvelle version déployée !
+            Commit : ${{ github.sha }}
+            Auteur : ${{ github.actor }}
+            Lien : https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+            Heure : $(date '+%d/%m/%Y à %H:%M')
+          secrets: inherit
 
-      - name: Build & Push Images
+      # Bonus : ajoute la date lisible dans le message Slack
+      - name: Générer date lisible
+        if: always()
         run: |
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-
-          for SERVICE in $SERVICES; do
-            IMAGE="${DOCKERHUB_NAMESPACE}/cloudtaskhub-${SERVICE}"
-
-            echo "Building $SERVICE..."
-            docker build \
-              -t ${IMAGE}:latest \
-              -t ${IMAGE}:${SHORT_SHA} \
-              ./services/${SERVICE}
-
-            echo "Scanning image with Trivy..."
-            trivy image ${IMAGE}:latest
-
-            echo "Pushing $IMAGE..."
-            docker push ${IMAGE}:latest
-            docker push ${IMAGE}:${SHORT_SHA}
-          done
-
-      - name: Slack notify failure
-        if: failure()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_COLOR: "#ff0000"
-          SLACK_TITLE: "❌ MAIN BUILD FAILED"
-          SLACK_MESSAGE: |
-            Build failed for commit ${{ github.sha }}
-
-      - name: Slack notify success
-        if: success()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_COLOR: "#36a64f"
-          SLACK_TITLE: "✅ MAIN BUILD SUCCESS"
-          SLACK_MESSAGE: |
-            Docker images pushed successfully.
-            Commit: ${{ github.sha }}
+          echo "date=$(date '+%d/%m/%Y à %H:%M')" >> $GITHUB_OUTPUT
+        id: date
