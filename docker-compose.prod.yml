@@ -1,3 +1,22 @@
+# docker-compose.prod.yml
+# =============================================================
+# Stack PRODUCTION – fonctionne avec l’IP publique uniquement
+# → Pas besoin de domaine, pas de DNS, pas de cloudflare
+# → Tout accessible via https://TON_IP_PUBLIQUE
+#
+# Exemple d’accès après déploiement :
+#   API      → https://165.22.224.46
+#   Traefik  → https://165.22.224.46:8080
+#   Jaeger   → http://165.22.224.46:16686
+#   Grafana  → http://165.22.224.46:3000
+#   Prometheus → http://165.22.224.46:9090
+#
+# Prérequis sur le serveur (une seule fois) :
+#   mkdir -p /opt/cloudtaskhub /var/data/traefik
+#   touch /var/data/traefik/acme.json && chmod 600 /var/data/traefik/acme.json
+#   docker network create traefik-public
+# =============================================================
+
 version: "3.9"
 
 networks:
@@ -5,11 +24,12 @@ networks:
     external: true
   internal:
     driver: overlay
-    attachable: true  # permet aux services non-swarm de s’y connecter si besoin
+    attachable: true
 
 services:
+
   # ========================================
-  # TRAEFIK
+  # TRAEFIK v3 – HTTPS auto avec IP publique (Let's Encrypt marche !)
   # ========================================
   traefik:
     image: traefik:v3.1
@@ -19,8 +39,15 @@ services:
       - "--providers.docker.exposedByDefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Let's Encrypt en mode HTTP challenge (fonctionne sans domaine)
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=donaldtedom0@gmail.com"  # obligatoire
+      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
       - "--api.dashboard=true"
-      - "--api.insecure=false"          # sécurisé en prod
+      - "--api.insecure=false"
       - "--log.level=INFO"
     ports:
       - target: 80
@@ -31,7 +58,7 @@ services:
         mode: host
       - target: 8080
         published: 8080
-        mode: host
+        mode: host                     # Dashboard → https://TON_IP:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/data/traefik/acme.json:/acme.json
@@ -40,8 +67,9 @@ services:
         constraints:
           - node.role == manager
       labels:
+        # Dashboard accessible sur le port 8080
         - "traefik.enable=true"
-        - "traefik.http.routers.dashboard.rule=Host(`traefik.yourdomain.com`)"
+        - "traefik.http.routers.dashboard.rule=HostRegexp(`{host:.+}`) && PathPrefix(`/dashboard`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=websecure"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
@@ -49,15 +77,18 @@ services:
       - traefik-public
 
   # ========================================
-  # GATEWAY + MICRO-SERVICES (tous identiques)
+  # GATEWAY – point d’entrée principal
   # ========================================
   gateway-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
     deploy:
       replicas: 3
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gateway.rule=Host(`api.yourdomain.com`)"
+        # Accessible sur la racine de l’IP
+        - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
         - "traefik.http.routers.gateway.entrypoints=websecure"
         - "traefik.http.routers.gateway.tls.certresolver=myresolver"
         - "traefik.http.services.gateway.loadbalancer.server.port=8000"
@@ -65,48 +96,46 @@ services:
       - traefik-public
       - internal
 
+  # ========================================
+  # MICRO-SERVICES (pas exposés publiquement → uniquement via gateway)
+  # ========================================
   auth-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:${IMAGE_TAG:-latest}
-    deploy:
-      replicas: 2
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.auth.rule=Host(`auth.yourdomain.com`)"
-        - "traefik.http.routers.auth.entrypoints=websecure"
-        - "traefik.http.routers.auth.tls.certresolver=myresolver"
-        - "traefik.http.services.auth.loadbalancer.server.port=8000"
-    networks:
-      - internal
-      - traefik-public
-
-  # (project-service, billing-service, notification-service, analytics-service → même pattern)
-  # Je te les mets en version raccourcie pour éviter la répétition :
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
+    deploy: { replicas: 2 }
+    networks: [internal]
 
   project-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
     deploy: { replicas: 2 }
-    networks: [internal, traefik-public]
-    configs:
-      - source: app-config
-        target: /app/config.yaml
+    networks: [internal]
 
   billing-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
     deploy: { replicas: 2 }
-    networks: [internal, traefik-public]
+    networks: [internal]
 
   notification-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
     deploy: { replicas: 2 }
-    networks: [internal, traefik-public]
+    networks: [internal]
 
   analytics-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:${IMAGE_TAG:-latest}
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
     deploy: { replicas: 2 }
-    networks: [internal, traefik-public]
+    networks: [internal]
 
   # ========================================
-  # KAFKA KRaft (3 nœuds – sans Zookeeper !)
+  # KAFKA KRaft – 3 nœuds (haute dispo)
   # ========================================
   kafka-1:
     image: bitnami/kafka:3.8.0
@@ -120,12 +149,8 @@ services:
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka-1:9092
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-    deploy:
-      replicas: 1
-      placement:
-        constraints: [node.labels.kafka == node1]  # optionnel
-    networks:
-      - internal
+    deploy: { replicas: 1 }
+    networks: [internal]
 
   kafka-2:
     image: bitnami/kafka:3.8.0
@@ -157,11 +182,8 @@ services:
     deploy: { replicas: 1 }
     networks: [internal]
 
-  # Dans tes services, utilise simplement :
-  # KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
-
   # ========================================
-  # OBSERVABILITY
+  # OBSERVABILITÉ (accessibles directement sur IP)
   # ========================================
   jaeger:
     image: jaegertracing/all-in-one:1.58
@@ -182,7 +204,3 @@ services:
     ports:
       - "3000:3000"
     networks: [internal]
-
-configs:
-  app-config:
-    file: ./configs/app.yaml

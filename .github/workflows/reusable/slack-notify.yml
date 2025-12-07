@@ -1,0 +1,84 @@
+# .github/workflows/reusable/slack-notify.yml
+# =============================================================
+# Workflow réutilisable : envoi d’une notification Slack jolie
+#
+# Utilisé par :
+#   • ci-pr.yml           → quand une PR échoue
+#   • ci-main.yml         → quand un build réussit ou rien à build
+#   • cd-deploy.yml       → déploiement auto en prod
+#   • cd-rollback.yml     → rollback manuel
+#
+# Comment l’appeler depuis un autre workflow ?
+#   uses: ./.github/workflows/reusable/slack-notify.yml
+#   with:
+#     status: success | failure | warning | info
+#     title:  "Mon super message"
+#     message: |
+#       Détails sur plusieurs lignes
+#       Commit : ${{ github.sha }}
+#
+# Secret obligatoire :
+#   SLACK_WEBHOOK_URL → webhook de ton canal Slack (#deploys, #alerts, etc.)
+# =============================================================
+
+name: Slack Notify
+
+# Ce workflow est uniquement appelé par d’autres workflows
+on:
+  workflow_call:
+    inputs:
+      status:
+        type: string
+        required: true                 # success, failure, warning, info
+      title:
+        type: string
+        required: true                 # titre du message Slack
+      message:
+        type: string
+        default: ""                    # optionnel : texte détaillé
+        required: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    name: Envoi notification Slack
+
+    steps:
+      # Action officielle ultra fiable (utilisée par 100k+ repos)
+      - name: Envoyer le message sur Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          # Webhook de ton canal Slack (doit être dans les secrets GitHub)
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+          # Couleur du message selon le statut
+          SLACK_COLOR: >-
+            ${{ 
+              inputs.status == 'success' && 'good' ||
+              inputs.status == 'warning' && 'warning' ||
+              inputs.status == 'info'     && '#439FE0' ||
+              'danger'
+            }}
+
+          # Titre principal du message
+          SLACK_TITLE: ${{ inputs.title }}
+
+          # Corps du message (si vide → affiche juste repo + branche)
+          SLACK_MESSAGE: |
+            ${{ inputs.message != '' && inputs.message || '' }}
+            ${{ inputs.message != '' && '' || format('Repo : {0}', github.repository) }}
+            Branche : ${{ github.ref_name }}
+            Auteur : ${{ github.actor }}
+            Lien : https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+
+          # Icône et nom du bot
+          SLACK_ICON: https://github.com/github.png?size=48
+          SLACK_USERNAME: GitHub Actions
+          SLACK_FOOTER: Déployé le $(date '+%d/%m/%Y à %H:%M')
+
+      # Bonus : affiche la date/heure dans le footer (même si Slack ne l’utilise pas toujours)
+      - name: Générer date lisible
+        if: always()
+        run: |
+          echo "date=$(date '+%d/%m/%Y à %H:%M')" >> $GITHUB_OUTPUT
+        id: date

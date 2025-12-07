@@ -1,0 +1,103 @@
+# .github/workflows/reusable/test.yml
+# =============================================================
+# Workflow réutilisable : exécute TOUS les tests du projet
+# → Unit tests + Coverage + Integration tests avec Docker Compose
+#
+# Utilisé par :
+#   • ci-pr.yml      → à chaque Pull Request
+#   • ci-main.yml    → avant chaque build/push sur main
+#
+# Ce qu’il fait (dans l’ordre) :
+# 1. Checkout du code
+# 2. Setup Python 3.11
+# 3. Installe pytest + couverture
+# 4. Lance les tests unitaires + génère un rapport Codecov
+# 5. Démarre tout le stack de test (Kafka KRaft, bases de données, etc.)
+# 6. Lance les tests d’intégration
+# 7. Nettoie tout (même si ça plante)
+# =============================================================
+
+name: Run Tests
+
+# Ce workflow est appelé par d’autres workflows → workflow_call
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Tests unitaires + intégration
+
+    steps:
+      # 1. Récupère tout le code source
+      - name: Checkout du code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # nécessaire pour certains plugins de couverture
+
+      # 2. Installe Python 3.11 (version utilisée en prod)
+      - name: Configuration de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip           # cache automatique des dépendances → gain de 30-60s
+
+      # 3. Installe les outils de test
+      - name: Installation des dépendances de test
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio   # ajoute ce que tu veux
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+
+      # 4. Lance les tests unitaires + génération du rapport de couverture
+      - name: Tests unitaires + couverture (Codecov)
+        run: |
+          pytest tests/unit/ \
+            --cov=services \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
+
+      # 5. Upload du rapport de couverture vers Codecov (facultatif mais PRO)
+      - name: Upload couverture vers Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}   # optionnel si repo public
+          fail_ci_if_error: true
+          verbose: true
+
+      # =============================================================
+      # TESTS D’INTÉGRATION (avec tout le stack réel)
+      # =============================================================
+
+      # 6. Démarre le stack de test (Kafka KRaft, Redis, DB, etc.)
+      - name: Démarrer le stack de test (docker-compose.tests.yml)
+        run: |
+          echo "Démarrage du stack de test..."
+          docker compose -f docker-compose.tests.yml up --build -d
+
+          echo "Attente que tout soit prêt (Kafka, etc.)..."
+          sleep 20   # ou remplace par un wait script plus intelligent si tu veux
+
+          echo "État du stack :"
+          docker compose -f docker-compose.tests.yml ps
+
+      # 7. Lance les tests d’intégration
+      #    Si ça échoue → on affiche les logs pour debug direct dans GitHub
+      - name: Lancer les tests d’intégration
+        run: |
+          echo "Exécution des tests d’intégration..."
+          pytest tests/integration/ -v || \
+            (echo "ÉCHEC → voici les logs :" && \
+             docker compose -f docker-compose.tests.yml logs && \
+             exit 1)
+
+      # 8. Nettoyage OBLIGATOIRE (même si ça plante)
+      #    → évite de laisser 50 conteneurs zombies sur le runner GitHub
+      - name: Nettoyage complet du stack
+        if: always()       # se lance même si un step précédent a échoué
+        run: |
+          echo "Nettoyage du stack de test..."
+          docker compose -f docker-compose.tests.yml down -v --remove-orphans || true
+          echo "Tout nettoyé !"

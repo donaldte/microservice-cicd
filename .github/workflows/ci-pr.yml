@@ -1,62 +1,95 @@
-name: CI - Pull Request Validation
+# .github/workflows/ci-pr.yml
+name: CI - Pull Request
 
 on:
   pull_request:
     branches: [ main ]
 
-env:
-  SERVICES: |
-    gateway
-    auth
-    project
-    billing
-    notification
-    analytics
-  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-
-  validate:
+  # =============================================================
+  # 1. Auto-détection des services + génération dynamique du filtre
+  # =============================================================
+  detect-services:
     runs-on: ubuntu-latest
-
+    outputs:
+      services_matrix: ${{ steps.generate.outputs.matrix }}
+      has_code_changes: ${{ steps.generate.outputs.has_changes }}
     steps:
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
         with:
-          python-version: "3.11"
+          fetch-depth: 0
 
-      - name: Install dependencies
+      # Étape magique : lit tous les dossiers dans services/ et génère le filtre
+      - name: Générer automatiquement les filtres pour tous les services
+        id: generate
         run: |
-          pip install -r requirements.txt
-          pip install pytest
+          # 1. Liste tous les dossiers dans services/ (sauf shared)
+          SERVICES=$(ls -d services/*/ | cut -d/ -f2 | grep -v "shared" || true)
+          
+          # 2. Si aucun service → on sort
+          if [ -z "$SERVICES" ]; then
+            echo "Aucun service trouvé"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "matrix=[{\"service\":\"none\"}]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
-      - name: Run unit tests
-        run: pytest -q
-
-      - name: Run integration tests
-        run: |
-          docker compose -f docker-compose.tests.yml up --build --abort-on-container-exit
-          docker compose -f docker-compose.tests.yml down
-
-      - name: Build docker images (LOCAL ONLY)
-        run: |
-          for SERVICE in $SERVICES; do
-            docker build -t ${SERVICE}-service:test ./services/${SERVICE}
+          # 3. Génère le YAML pour paths-filter
+          FILTER_YAML=""
+          for svc in $SERVICES; do
+            FILTER_YAML="$FILTER_YAML
+            $svc:
+              - 'services/$svc/**'
+              - 'services/shared/**'"
           done
 
-      - name: Slack notify (if failed)
-        if: failure()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_TITLE: "❌ CI Failed for PR #${{ github.event.pull_request.number }}"
-          SLACK_COLOR: "#ff0000"
-          SLACK_MESSAGE: |
-            Pull Request failed tests or build.
-            Author: ${{ github.event.pull_request.user.login }}
-            Branch: ${{ github.head_ref }}
-            Commit: ${{ github.sha }}
+          echo "=== FILTRES GÉNÉRÉS AUTOMATIQUEMENT ==="
+          echo "$FILTER_YAML"
+          echo "=== FIN ==="
+
+          # 4. Écrit le YAML dans un fichier temporaire
+          echo "$FILTER_YAML" > /tmp/generated-filters.yml
+
+          # 5. Sortie pour paths-filter
+          echo "filters<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/generated-filters.yml >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # 6. Matrice pour les jobs suivants (format matrix)
+          MATRIX=$(echo "$SERVICES" | jq -R . | jq -s '{service: .}')
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+          # 7. Détection si du code a changé (hors docs, README, etc.)
+          CODE_CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '^services/.*\.(py|js|go|ts|java)$' || true)
+          [ -n "$CODE_CHANGED" ] && echo "has_changes=true" >> $GITHUB_OUTPUT || echo "has_changes=false" >> $GITHUB_OUTPUT
+
+      # Maintenant on utilise le filtre généré dynamiquement
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: ${{ steps.generate.outputs.filters }}
+
+  # =============================================================
+  # 2. Lancer les tests seulement si du vrai code a changé
+  # =============================================================
+  tests:
+    needs: detect-services
+    if: needs.detect-services.outputs.has_changes == 'true' || github.event.pull_request.draft == true
+    uses: ./.github/workflows/reusable/test.yml
+    secrets: inherit
+
+  # =============================================================
+  # 3. Slack si échec
+  # =============================================================
+  slack-failure:
+    needs: tests
+    if: failure()
+    uses: ./.github/workflows/reusable/slack-notify.yml
+    with:
+      status: failure
+      title: "PR #${{ github.event.pull_request.number }} échouée"
+    secrets: inherit
