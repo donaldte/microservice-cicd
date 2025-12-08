@@ -42,7 +42,7 @@ jobs:
     uses: ./.github/workflows/build-and-push.yml
     with:
       service: ${{ matrix.service }}
-    secrets: inherit
+      secrets: inherit
 
   # =============================================================
   # Notification Slack – Succès global
@@ -56,12 +56,12 @@ jobs:
         uses: ./.github/workflows/slack-notify.yml
         with:
           status: success
-          title: "Build & Push terminé (6 services)"
+          title: "Build & Push terminé (6 services) ✅"
           message: |
             Toutes les images sont à jour
             Commit : ${{ github.sha }}
             Par : ${{ github.actor }}
-        secrets: inherit
+          secrets: inherit
 
   # =============================================================
   # Notification Slack – Échec
@@ -74,6 +74,6 @@ jobs:
         uses: ./.github/workflows/slack-notify.yml
         with:
           status: failure
-          title: "ÉCHEC du build global"
+          title: "ÉCHEC ❌  du build global"
           message: "Un ou plusieurs services ont planté"
-        secrets: inherit
+          secrets: inherit
