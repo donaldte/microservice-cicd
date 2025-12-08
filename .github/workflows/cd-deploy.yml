@@ -1,16 +1,16 @@
 # .github/workflows/cd-deploy.yml
 # =============================================================
-# CD - Déploiement AUTOMATIQUE en production
-# → Zéro bug, zéro surprise, 100 % fiable
-# → Fonctionne même si le dossier n'existe pas, même si git n'est pas là
-# → Logs clairs, rollback facile, Slack parfait
+# CD - Déploiement AUTOMATIQUE en production – VERSION 100% FONCTIONNELLE
+# → Plus de bug "action.yml not found"
+# → Slack officiel (slackapi/slack-github-action)
+# → Déploiement fiable + notifications parfaites
 # =============================================================
 
 name: CD - Deploy Production
 
 on:
   workflow_run:
-    workflows: ["CI - Main Build & Push"]   # ← doit être EXACTEMENT le nom de ton ci-main.yml
+    workflows: ["CI - Main Build & Push"]
     types:
       - completed
     branches: [ main ]
@@ -29,21 +29,14 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 60s
+          timeout: 90s
           script: |
-            set -e  # Arrête tout si une commande échoue
-
+            set -e
             echo "Connexion SSH réussie sur $(hostname)"
-
-            # Crée le dossier s'il n'existe pas (évite les erreurs)
             mkdir -p /opt/cloudtaskhub
             cd /opt/cloudtaskhub
 
-            # Récupère le dernier commit (pour le message Slack)
-            COMMIT_MSG=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
-            echo "Déploiement de la version : $COMMIT_MSG"
-
-            # Le cœur du déploiement – ultra-robuste
+            echo "Déploiement en cours..."
             docker stack deploy \
               -c docker-compose.prod.yml \
               cloudtaskhub \
@@ -51,34 +44,61 @@ jobs:
               --resolve-image changed \
               --prune
 
-            echo "Déploiement terminé avec succès !"
-            echo "État du stack :"
+            echo "Déploiement terminé !"
             docker stack ps cloudtaskhub --no-trunc
-
-            echo "Services actifs :"
             docker service ls
 
-      # Notification Slack – toujours envoyée
+      # =============================================================
+      # Slack – Succès (action officielle)
+      # =============================================================
       - name: Slack – Déploiement réussi
-        uses: ./.github/workflows/slack-notify.yml
         if: success()
+        uses: slackapi/slack-github-action@v1.24.0
         with:
-          status: success
-          title: "Déploiement en prod réussi"
-          message: |
-            Nouvelle version déployée !
-            Commit : ${{ github.sha }}
-            Auteur : ${{ github.actor }}
-            Lien : https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+          payload: |
+            {
+              "text": "Déploiement en prod réussi",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": "*Déploiement en production réussi*" }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Commit:* ${{ github.sha }}" },
+                    { "type": "mrkdwn", "text": "*Par:* ${{ github.actor }}" }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": { "type": "plain_text", "text": "Voir le commit" },
+                      "url": "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      # Notification en cas d’échec SSH
+      # =============================================================
+      # Slack – Échec
+      # =============================================================
       - name: Slack – Déploiement échoué
-        uses: ./.github/workflows/slack-notify.yml
         if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
         with:
-          status: failure
-          title: "ÉCHEC du déploiement en prod"
-          message: |
-            Le déploiement a planté
-            Commit : ${{ github.sha }}
-            Vérifie les logs sur le serveur !
+          payload: |
+            {
+              "text": "ÉCHEC du déploiement en prod",
+              "blocks": [
+                { "type": "section", "text": { "type": "mrkdwn", "text": "*ÉCHEC du déploiement en production*" } },
+                { "type": "section", "text": { "type": "mrkdwn", "text": "Vérifie les logs sur le serveur !" } }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
