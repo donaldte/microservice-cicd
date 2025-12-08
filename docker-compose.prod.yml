@@ -108,7 +108,7 @@ services:
   # MICRO-SERVICES (internes uniquement)
   # ========================================
   auth-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:latest
     environment:
       - KAFKA_ENABLED=false
     deploy:
@@ -117,7 +117,7 @@ services:
       - internal
 
   project-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:latest
     environment:
       - KAFKA_ENABLED=false
     deploy:
@@ -126,7 +126,7 @@ services:
       - internal
 
   billing-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:latest
     environment:
       - KAFKA_ENABLED=false
     deploy:
@@ -135,7 +135,7 @@ services:
       - internal
 
   notification-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:latest
     environment:
       - KAFKA_ENABLED=false
     deploy:
@@ -144,7 +144,7 @@ services:
       - internal
 
   analytics-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:latest
     environment:
       - KAFKA_ENABLED=false
     deploy:
