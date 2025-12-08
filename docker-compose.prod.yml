@@ -37,7 +37,7 @@ services:
   # TRAEFIK v3 – Reverse proxy + HTTPS auto (Let's Encrypt)
   # ========================================
   traefik:
-    image: traefik:traefik:v2.11
+    image: traefik:v2.11
     command:
       # NOUVEAU EN V3 : Provider "swarm" séparé de "docker"
       - "--providers.swarm=true"                          # ← REMPLACE swarmMode
