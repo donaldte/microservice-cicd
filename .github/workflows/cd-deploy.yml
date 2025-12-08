@@ -70,7 +70,6 @@ jobs:
             Commit : ${{ github.sha }}
             Auteur : ${{ github.actor }}
             Lien : https://github.com/${{ github.repository }}/commit/${{ github.sha }}
-          secrets: inherit
 
       # Notification en cas d’échec SSH
       - name: Slack – Déploiement échoué
@@ -83,4 +82,3 @@ jobs:
             Le déploiement a planté
             Commit : ${{ github.sha }}
             Vérifie les logs sur le serveur !
-          secrets: inherit

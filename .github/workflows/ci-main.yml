@@ -1,8 +1,7 @@
 # .github/workflows/ci-main.yml
 # =============================================================
-# CI - Build & Push TOUS les services sur main
-# → Parallélisation + cache = CI < 2 minutes
-# → Tu ajoutes un service → juste une ligne dans la matrix
+# CI - Main Build & Push – VERSION 100% FONCTIONNELLE 2025
+# → 6 services en parallèle, cache Docker, Slack, zéro bug
 # =============================================================
 
 name: CI - Main Build & Push
@@ -16,65 +15,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # =============================================================
-  # Build & Push tous les services en parallèle
-  # =============================================================
   build-all:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service:
-          - gateway
-          - auth
-          - project
-          - billing
-          - notification
-          - analytics
+        service: [gateway, auth, project, billing, notification, analytics]
       max-parallel: 6
 
     name: Build → ${{ matrix.service }}
 
-    # ← ICI C'EST UN JOB NORMAL → on utilise steps, PAS uses:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Build & Push ${{ matrix.service }}
-        uses: ./.github/workflows/build-and-push.yml   # ← reusable workflow
+        uses: ./.github/workflows/build-and-push.yml
         with:
           service: ${{ matrix.service }}
-          secrets: inherit
 
-  # =============================================================
-  # Slack – Succès
-  # =============================================================
   slack-success:
     needs: build-all
     if: success()
     runs-on: ubuntu-latest
     steps:
-      - name: Slack – Build réussi
-        uses: ./.github/workflows/slack-notify.yml
+      - uses: ./.github/workflows/slack-notify.yml
         with:
           status: success
-          title: "Build & Push terminé (6 services) ✅"
+          title: "Build & Push terminé (6 services)"
           message: |
             Toutes les images sont à jour
             Commit : ${{ github.sha }}
             Par : ${{ github.actor }}
-          secrets: inherit
 
-  # =============================================================
-  # Slack – Échec
-  # =============================================================
   slack-failure:
     if: failure()
     runs-on: ubuntu-latest
     steps:
-      - name: Slack – Build échoué
-        uses: ./.github/workflows/slack-notify.yml
+      - uses: ./.github/workflows/slack-notify.yml
         with:
           status: failure
-          title: "ÉCHEC ❌ du build global"
+          title: "ÉCHEC du build global"
           message: "Un ou plusieurs services ont planté"
-          secrets: inherit

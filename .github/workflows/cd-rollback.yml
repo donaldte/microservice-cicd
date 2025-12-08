@@ -73,4 +73,3 @@ jobs:
             Par : **${{ github.actor }}**
             Repo : ${{ github.repository }}
             Lien : https://github.com/${{ github.repository }}/actions
-          secrets: inherit
