@@ -64,7 +64,7 @@ jobs:
           severity: CRITICAL,HIGH
 
   # =============================================================
-  # Slack – Succès
+  # Slack – failure notification
   # =============================================================
   slack-failure:
     needs: build-all
@@ -79,7 +79,7 @@ jobs:
     secrets: inherit  
 
   # =============================================================
-  # 4. Notification Slack si tout est bon (optionnel mais pro)
+  # 4. Notification Slack (success)
   # =============================================================
   slack-success:
     needs:  build-all
