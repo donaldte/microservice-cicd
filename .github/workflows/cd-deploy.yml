@@ -2,7 +2,6 @@
 # CD - Déploiement AUTOMATIQUE
 # Repo : donaldte/microservice-cicd
 # Déploie automatiquement sur ton serveur Docker Swarm
-# Gestion propre du clone/pull même si le dossier existe
 # =============================================================
 
 name: CD - Deploy Production
@@ -55,8 +54,13 @@ jobs:
             git checkout main
             git pull origin main
 
-            echo "IMAGE_TAG=latest" > .env
-            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env
+            # EXPORT VARIABLES (critical fix)
+            echo "🌍 Exporting environment variables for Swarm..."
+            export IMAGE_TAG="latest"
+            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+
+            echo "Using DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME"
+            echo "Using IMAGE_TAG=$IMAGE_TAG"
 
             echo "🚀 Déploiement Docker Swarm..."
             docker stack deploy \
@@ -70,7 +74,6 @@ jobs:
             docker stack ps cloudtaskhub --no-trunc
             docker service ls
 
-      # Slack – Succès
       - name: Slack – Déploiement réussi
         if: success()
         uses: slackapi/slack-github-action@v1.24.0
@@ -80,7 +83,6 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      # Slack – Échec
       - name: Slack – Déploiement échoué
         if: failure()
         uses: slackapi/slack-github-action@v1.24.0

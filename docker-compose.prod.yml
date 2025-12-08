@@ -23,8 +23,7 @@
 # Fichier .env (sur le serveur) :
 #   DOCKERHUB_USERNAME=tonusername
 #   IMAGE_TAG=latest
-# =============================================================
-
+# ============================================================="
 networks:
   traefik-public:
     external: true
@@ -84,7 +83,7 @@ services:
   # API GATEWAY – Point d’entrée public
   # ========================================
   gateway-service:
-    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:latest
     environment:
       # On désactive Kafka en prod si tu ne l'utilises pas encore
       - KAFKA_ENABLED=false
