@@ -92,3 +92,4 @@ jobs:
         Tous les services ont été build avec succès !
         Auteur : ${{ github.actor }}
         Lien : https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+    secrets: inherit
