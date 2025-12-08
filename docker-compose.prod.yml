@@ -19,80 +19,35 @@ services:
   traefik:
     image: traefik:v3.6
     command:
-     # PROVIDER SWARM (OBLIGATOIRE EN SWARM MODE)
       - "--providers.swarm=true"
       - "--providers.swarm.exposedbydefault=false"
-      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"   # ← LA LIGNE MANQUANTE !
       - "--providers.swarm.network=traefik-public"
-
-      # ================================
-      # 🔥 ENTRYPOINTS EN MODE SANS HTTPS
-      # ================================
       - "--entrypoints.web.address=:80"
-
-      # ==========================================================
-      # ❌ À DÉSACTIVER TANT QUE TU N’AS PAS DE DOMAINE
-      #    Supprimer HTTPS & redirection pour éviter les erreurs
-      # ==========================================================
-      # - "--entrypoints.websecure.address=:443"
-      # - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      # - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-
-      # ====================================================================
-      # ❌ DÉSACTIVER LET'S ENCRYPT POUR LE MOMENT
-      #    (NE FONCTIONNE PAS SANS NOM DE DOMAINE)
-      # ====================================================================
-      # - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
-      # - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      # - "--certificatesresolvers.myresolver.acme.email=donaldtedom0@gmail.com"
-      # - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
-
       - "--api.dashboard=true"
-      - "--api.insecure=true"  # Dashboard accessible en HTTP
+      - "--api.insecure=true"
       - "--log.level=INFO"
-
     ports:
       - target: 80
         published: 80
         mode: host
-
-      # ==========================================================
-      # ❌ INUTILE POUR L'INSTANT (HTTPS désactivé)
-      # ==========================================================
-      # - target: 443
-      #   published: 443
-      #   mode: host
-
-      # Dashboard Traefik (toujours en clear HTTP)
       - target: 8080
         published: 8080
         mode: host
-
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-
-      # ====================================================================
-      # ❌ LET’S ENCRYPT DÉSACTIVÉ → pas besoin de monter le fichier acme.json
-      # ====================================================================
-      # - /var/data/traefik/acme.json:/acme.json
-
     deploy:
       placement:
         constraints:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-
-        # Dashboard en HTTP simple (pas de HTTPS)
+        # LES 2 LIGNES MAGIQUES QUI MANQUAIENT
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+        - "traefik.http.services.api.loadbalancer.server.port=8080"
+        # Dashboard
         - "traefik.http.routers.dashboard.rule=HostRegexp(`{host:.+}`) && PathPrefix(`/dashboard`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=web"
-
-        # ==========================================================
-        # ❌ ENLEVER LE CERTRESOLVER
-        # ==========================================================
-        # - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-
     networks:
       - traefik-public
 
