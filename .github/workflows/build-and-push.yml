@@ -84,3 +84,35 @@ jobs:
           echo "Build & push de cloudtaskhub-${{ inputs.service }} terminé"
           echo "Tags publiés :"
           echo "${{ steps.meta.outputs.tags }}" | sed 's/,/\n  → /g'
+
+  
+  # =============================================================
+  # 3. Notification Slack en cas d’échec
+  # =============================================================
+  slack-failure:
+    needs: build-and-push
+    if: failure()                             # seulement si les tests ont planté
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: failure
+      title: "Le Build du PR ❌ #${{ github.event.pull_request.number }} a échoué"
+      message: |
+        Auteur : ${{ github.actor }}
+        Lien : https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  # =============================================================
+  # 4. Notification Slack si tout est bon (optionnel mais pro)
+  # =============================================================
+  slack-success:
+    needs:  build-and-push
+    if: success()
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: success
+      title: "Le Build du PR ✅ #${{ github.event.pull_request.number }} a réussi"
+      message: |
+        Tous les les services ont été build avec succès !
+        Auteur : ${{ github.actor }}
+        Lien : https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+    secrets: inherit  

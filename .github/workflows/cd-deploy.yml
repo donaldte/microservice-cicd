@@ -74,20 +74,32 @@ jobs:
             docker stack ps cloudtaskhub --no-trunc
             docker service ls
 
-      - name: Slack – Déploiement réussi
-        if: success()
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            { "text": "🚀 Déploiement en prod de CloudTaskHub réussi !" }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  # =============================================================
+  # 3. Notification Slack en cas d’échec
+  # =============================================================
+  slack-failure:
+    needs: deploy
+    if: failure()                             # seulement si les tests ont planté
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: failure
+      title: "Le Deploy du PR ❌ a échoué"
+      message: |
+        Auteur : ${{ github.actor }}
+    secrets: inherit
 
-      - name: Slack – Déploiement échoué
-        if: failure()
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            { "text": "❌ ÉCHEC du déploiement CloudTaskHub en production." }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  # =============================================================
+  # 4. Notification Slack si tout est bon (optionnel mais pro)
+  # =============================================================
+  slack-success:
+    needs:  deploy
+    if: success()
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      status: success
+      title: "Le Build du PR ✅  a réussi"
+      message: |
+        Le déploiement a réussi !
+        Auteur : ${{ github.actor }}
+    secrets: inherit  
+
