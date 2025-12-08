@@ -1,10 +1,8 @@
 # .github/workflows/ci-main.yml
 # =============================================================
 # CI - Build & Push TOUS les services sur main
-# → Version 2025 ultra-simple et ultra-rapide
-# → Plus de détection de changement = zéro bug, zéro maintenance
-# → Parallélisation + cache Docker = CI en moins de 2 minutes
-# → Tu ajoutes un service → tu l'ajoutes juste dans la matrix
+# → Parallélisation + cache = CI < 2 minutes
+# → Tu ajoutes un service → juste une ligne dans la matrix
 # =============================================================
 
 name: CI - Main Build & Push
@@ -20,14 +18,12 @@ concurrency:
 jobs:
   # =============================================================
   # Build & Push tous les services en parallèle
-  # → 6 services = 6 jobs en même temps
-  # → Cache Docker = chaque service build en 15-30s
   # =============================================================
   build-all:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: 
+        service:
           - gateway
           - auth
           - project
@@ -38,14 +34,19 @@ jobs:
 
     name: Build → ${{ matrix.service }}
 
-    # Réutilise le workflow propre et ultra-rapide
-    uses: ./.github/workflows/build-and-push.yml
-    with:
-      service: ${{ matrix.service }}
-      secrets: inherit
+    # ← ICI C'EST UN JOB NORMAL → on utilise steps, PAS uses:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build & Push ${{ matrix.service }}
+        uses: ./.github/workflows/build-and-push.yml   # ← reusable workflow
+        with:
+          service: ${{ matrix.service }}
+          secrets: inherit
 
   # =============================================================
-  # Notification Slack – Succès global
+  # Slack – Succès
   # =============================================================
   slack-success:
     needs: build-all
@@ -64,7 +65,7 @@ jobs:
           secrets: inherit
 
   # =============================================================
-  # Notification Slack – Échec
+  # Slack – Échec
   # =============================================================
   slack-failure:
     if: failure()
@@ -74,6 +75,6 @@ jobs:
         uses: ./.github/workflows/slack-notify.yml
         with:
           status: failure
-          title: "ÉCHEC ❌  du build global"
+          title: "ÉCHEC ❌ du build global"
           message: "Un ou plusieurs services ont planté"
           secrets: inherit
