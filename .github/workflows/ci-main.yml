@@ -1,9 +1,11 @@
 # .github/workflows/ci-main.yml
 # =============================================================
-# CI - Main Build & Push – VERSION 100% FONCTIONNELLE 2025 (MATRIX FIXÉE)
-# → Matrix conservée + reusable workflow appelé CORRECTEMENT
-# → Secrets passés explicitement (anti-bug GitHub)
-# → CI < 2 min, stable, pro
+# CI - Main Build & Push – VERSION ULTIME 2025 (steps + matrix)
+# → 6 services en parallèle
+# → Utilise un simple step "run" → zéro bug reusable workflow
+# → Cache Docker ultra-rapide
+# → Slack parfait
+# → Tu ajoutes un service → 1 ligne dans la matrix
 # =============================================================
 
 name: CI - Main Build & Push
@@ -26,22 +28,40 @@ jobs:
 
     name: Build → ${{ matrix.service }}
 
-    # LE TRUC MAGIQUE QUI RÉSOUT TOUT :
-    # On fait un step "appel" du reusable workflow avec "run"
-    # → GitHub le traite comme un workflow, pas comme une action
     steps:
+      # 1. Checkout du code (obligatoire pour le cache Docker)
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. Login Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 3. Build & Push avec cache (le cœur du système)
       - name: Build & Push ${{ matrix.service }}
-        run: |
-          echo "Lancement du build pour ${{ matrix.service }}..."
-          # Appelle le reusable workflow via l'API GitHub (méthode 100% fiable)
-          gh workflow run build-and-push.yml \
-            -f service=${{ matrix.service }} \
-            --ref ${{ github.ref }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ matrix.service }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ matrix.service }}:latest
+          cache-to: type=inline,mode=max
+          platforms: linux/amd64
+
+      # 4. Scan sécurité (optionnel mais pro)
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/cloudtaskhub-${{ matrix.service }}:latest
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
   # =============================================================
   # Slack – Succès
@@ -51,26 +71,40 @@ jobs:
     if: success()
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/workflows/slack-notify.yml
+      - uses: slackapi/slack-github-action@v1.24.0
         with:
-          status: success
-          title: "Build & Push terminé (6 services)"
-          message: |
-            Toutes les images sont à jour
-            Commit : ${{ github.sha }}
-            Par : ${{ github.actor }}
-       
+          payload: |
+            {
+              "text": "Build & Push terminé (6 services)",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": { "type": "mrkdwn", "text": "*Build & Push terminé (6 services)*" }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Commit:* ${{ github.sha }}" },
+                    { "type": "mrkdwn", "text": "*Par:* ${{ github.actor }}" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-  # =============================================================
-  # Slack – Échec
-  # =============================================================
   slack-failure:
     if: failure()
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/workflows/slack-notify.yml
+      - uses: slackapi/slack-github-action@v1.24.0
         with:
-          status: failure
-          title: "ÉCHEC du build global"
-          message: "Un ou plusieurs services ont planté"
-    
+          payload: |
+            {
+              "text": "ÉCHEC du build global",
+              "blocks": [
+                { "type": "section", "text": { "type": "mrkdwn", "text": "*ÉCHEC du build global*" } }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
