@@ -72,9 +72,9 @@ jobs:
     # On lance les tests si :
     #   • un service a été modifié
     #   • OU si c’est une draft PR (pratique pour tester avant review)
-    if: >
-      needs.detect-services.outputs.has_changes == 'true' ||
-      github.event.pull_request.draft == true
+    # if: >
+    #   needs.detect-services.outputs.has_changes == 'true' ||
+    #   github.event.pull_request.draft == true
 
     uses: ./.github/workflows/test.yml        # ← workflow réutilisable (doit être à la racine)
     secrets: inherit                          # passe tous les secrets (DB, etc.)

@@ -39,13 +39,13 @@ services:
   traefik:
     image: traefik:v3.1
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.swarmMode=true"
-      - "--providers.docker.exposedByDefault=false"
+      # NOUVEAU EN V3 : Provider "swarm" séparé de "docker"
+      - "--providers.swarm=true"                          # ← REMPLACE swarmMode
+      - "--providers.swarm.exposedbydefault=false"        # ← REMPLACE exposedByDefault
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.myresolver.acme.email=donaldtedom0@gmail.com"
