@@ -50,7 +50,6 @@ services:
       - traefik-public
 
   gateway-service:
-    <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:latest
     deploy:
       replicas: 1
