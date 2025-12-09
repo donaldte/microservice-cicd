@@ -72,9 +72,9 @@ jobs:
             echo "🌍 Exporting environment variables for Swarm..."
             # Use 'export' before stack deploy to pass these variables into the compose file
             export IMAGE_TAG="latest"
-            # DOCKERHUB_USERNAME is already handled by GitHub Secrets mechanism through the `with.script` execution context
+            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
 
-            echo "Using DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME (masked in logs)"
+            echo "Using DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME"
             echo "Using IMAGE_TAG=$IMAGE_TAG"
 
             # --- DOCKER STACK DEPLOYMENT ---
