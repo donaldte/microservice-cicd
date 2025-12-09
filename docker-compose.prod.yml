@@ -65,7 +65,8 @@ services:
         parallelism: 1
         delay: 10s
       labels:
-        - "traefik.enable=true"
+        # --> This service is meant to be exposed by Traefik
+        - "traefik.enable=true" 
 
         # ==========================================================
         # 🔥 ROUTE EN HTTP SEULEMENT
@@ -78,6 +79,7 @@ services:
         # ==========================================================
         # - "traefik.http.routers.gateway.tls.certresolver=myresolver"
 
+        # --> You correctly defined the port here:
         - "traefik.http.services.gateway.loadbalancer.server.port=8000"
 
     networks:
@@ -93,6 +95,9 @@ services:
       - KAFKA_ENABLED=false
     deploy:
       replicas: 2
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -102,6 +107,9 @@ services:
       - KAFKA_ENABLED=false
     deploy:
       replicas: 2
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -111,6 +119,9 @@ services:
       - KAFKA_ENABLED=false
     deploy:
       replicas: 2
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -120,6 +131,9 @@ services:
       - KAFKA_ENABLED=false
     deploy:
       replicas: 2
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -129,6 +143,9 @@ services:
       - KAFKA_ENABLED=false
     deploy:
       replicas: 2
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -139,6 +156,10 @@ services:
     image: jaegertracing/all-in-one:1.58
     ports:
       - "16686:16686"
+    deploy:
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -148,6 +169,10 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+    deploy:
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
 
@@ -155,5 +180,9 @@ services:
     image: grafana/grafana:latest
     ports:
       - "3000:3000"
+    deploy:
+      # --> Add this label to ignore the service
+      labels:
+        - "traefik.enable=false"
     networks:
       - internal
