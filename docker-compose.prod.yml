@@ -56,7 +56,8 @@ services:
       replicas: 1
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
+        # - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
+        - "traefik.http.routers.gateway.rule=PathPrefix(`/`)"
         - "traefik.http.routers.gateway.entrypoints=web"
         - "traefik.http.services.gateway.loadbalancer.server.port=8000"
     networks:
