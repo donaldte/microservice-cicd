@@ -3,6 +3,10 @@
 
 ![Architecture](architecture.png)
 
+# Architecture de Déploiement
+
+![Architecture](architecture-deployment.png)
+
 CloudTaskHub est une architecture microservices complète construite avec FastAPI, Kafka, Docker Swarm, Traefik, OpenTelemetry, Jaeger, Prometheus, Grafana et un pipeline CI/CD GitHub Actions production-ready.
 
 Ce projet illustre les bonnes pratiques DevOps modernes, le déploiement distribué, l'observabilité complète, l'intégration continue, le déploiement continu, l'orchestration Swarm, et la communication inter-services.
