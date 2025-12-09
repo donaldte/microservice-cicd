@@ -22,6 +22,12 @@ SERVICES = {
     "notification": "http://notification-service:8000", 
     "analytics": "http://analytics-service:8000", 
 }
+
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "gateway", "message": "Welcome to the Gateway Service by Donald Programmer"}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "gateway"}
