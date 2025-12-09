@@ -9,9 +9,8 @@ name: CD - Deploy Production
 on:
   workflow_run:
     workflows: ["CI - Main Build & Push"]
-    types:
-      - completed
-    branches: [ main ]
+    types: [completed]
+    branches: [main]
 
 jobs:
   deploy:
@@ -19,72 +18,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: SSH → Clone/Pull + Déploiement auto
+      - name: Deploy to Swarm via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          timeout: 90s
-
-          # --------------------------------------------------
-          # UPDATED SCRIPT (Fixes network error and adds robustness)
-          # --------------------------------------------------
           script: |
             set -e
 
-            echo "Connexion SSH réussie sur $(hostname)"
+            echo "Connexion réussie sur $(hostname)"
 
-            # --- PREPARE DIRECTORY ---
-            WORKDIR="/opt/cloudtaskhub"
-            echo "Working in directory: $WORKDIR"
-            mkdir -p "$WORKDIR"
-            cd "$WORKDIR"
+            cd /opt/cloudtaskhub
 
-            # Check if directory is a git repo, fix if necessary
-            if [ ! -d ".git" ]; then
-              echo "📥 Not a Git repository → Initializing clone..."
-              git clone github.com . # Clone into current dir
-            fi
-
-            # --- UPDATE CODE ---
-            echo "🔄 Updating code from Git..."
+            echo "Mise à jour du code..."
             git fetch --all
-            git checkout main
-            git pull origin main
+            git reset --hard origin/main
+            git clean -fd
 
-            # >>> CRITICAL FIX: Ensure networks exist before deployment <<<
-            echo "⚙️ Ensuring required Docker Swarm networks exist..."
-            # Crée un réseau Swarm nommé exactement "traefik-public"
-            docker network inspect traefik-public >/dev/null 2>&1 || \
-              docker network create --driver overlay --attachable traefik-public
-            
-            # Crée un réseau Swarm nommé exactement "internal"
-            docker network inspect internal >/dev/null 2>&1 || \
-              docker network create --driver overlay --attachable internal
-            # <<< END FIX >>>
+            # CRÉATION DES RÉSEAUX AVEC SUBNET FIXE (plus jamais de conflit !)
+            echo "Création des réseaux overlay avec subnets fixes..."
+            docker network create --driver overlay --attachable --subnet=172.20.0.0/16 traefik-public || true
+            docker network create --driver overlay --attachable --subnet=172.21.0.0/16 internal || true
 
-
-            # --- DEPLOYMENT PREP ---
-            echo "🌍 Exporting environment variables for Swarm..."
-            export IMAGE_TAG="latest"
+            # Variables d'environnement
             export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-            echo "Using DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME (masked in logs)"
-            echo "Using IMAGE_TAG=$IMAGE_TAG"
+            export IMAGE_TAG="latest"
 
-            # --- DOCKER STACK DEPLOYMENT ---
-            echo "🚀 Starting Docker Swarm deployment..."
-            docker stack deploy \
-              -c docker-compose.prod.yml \
-              cloudtaskhub \
-              --with-registry-auth \
-              --resolve-image changed \
-              --prune
+            echo "Déploiement du stack..."
+            docker stack deploy -c docker-compose.prod.yml cloudtaskhub --with-registry-auth --prune
 
-            echo "✅ DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !"
-            docker stack ps cloudtaskhub --no-trunc
+            echo "DÉPLOIEMENT TERMINÉ !"
+            echo "Services :"
             docker service ls
+            echo "Tâches :"
+            docker stack ps cloudtaskhub --no-trunc
 
 
   # =============================================================

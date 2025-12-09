@@ -1,20 +1,13 @@
-# =============================================================
-# Stack PRODUCTION – MODE SANS DOMAINE POUR TESTS LOCAUX
-# → HTTP seulement (pas de HTTPS)
-# → À activer plus tard : Let's Encrypt + HTTPS docker network create --driver overlay --attachable cloudtaskhub_internal
-# =============================================================
+# docker-compose.prod.yml
+version: "3.8"
 
 networks:
   traefik-public:
-    external: true 
+    external: true
   internal:
     external: true
 
 services:
-
-  # ========================================
-  # TRAEFIK – Reverse proxy (mode HTTP)
-  # ========================================
   traefik:
     image: traefik:v3.6
     command:
@@ -36,152 +29,85 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       placement:
-        constraints:
-          - node.role == manager
+        constraints: [node.role == manager]
       labels:
         - "traefik.enable=true"
-        # LES 2 LIGNES MAGIQUES QUI MANQUAIENT
-        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
-        - "traefik.http.services.api.loadbalancer.server.port=8080"
-        # Dashboard
-        - "traefik.http.routers.dashboard.rule=HostRegexp(`{host:.+}`) && PathPrefix(`/dashboard`)"
+        - "traefik.http.routers.dashboard.rule=PathPrefix(`/dashboard`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=web"
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
     networks:
       - traefik-public
 
-  # ========================================
-  # GATEWAY SERVICE (mode HTTP)
-  # ========================================
   gateway-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:latest
     environment:
       - KAFKA_ENABLED=false
-      - TEST_MODE=false
     deploy:
       replicas: 3
-      update_config:
-        parallelism: 1
-        delay: 10s
       labels:
-        # --> This service is meant to be exposed by Traefik
-        - "traefik.enable=true" 
-
-        # ==========================================================
-        # 🔥 ROUTE EN HTTP SEULEMENT
-        # ==========================================================
+        - "traefik.enable=true"
         - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
         - "traefik.http.routers.gateway.entrypoints=web"
-
-        # ==========================================================
-        # ❌ PAS DE HTTPS → PAS DE CERTRESOLVER
-        # ==========================================================
-        # - "traefik.http.routers.gateway.tls.certresolver=myresolver"
-
-        # --> You correctly defined the port here:
         - "traefik.http.services.gateway.loadbalancer.server.port=8000"
-
     networks:
       - traefik-public
       - internal
 
-  # ========================================
-  # MICRO-SERVICES INTERNES
-  # ========================================
   auth-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:latest
-    environment:
-      - KAFKA_ENABLED=false
     deploy:
       replicas: 2
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   project-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:latest
-    environment:
-      - KAFKA_ENABLED=false
     deploy:
       replicas: 2
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   billing-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:latest
-    environment:
-      - KAFKA_ENABLED=false
     deploy:
       replicas: 2
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   notification-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:latest
-    environment:
-      - KAFKA_ENABLED=false
     deploy:
       replicas: 2
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   analytics-service:
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:latest
-    environment:
-      - KAFKA_ENABLED=false
     deploy:
       replicas: 2
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
-  # ========================================
-  # OBSERVABILITÉ
-  # ========================================
   jaeger:
     image: jaegertracing/all-in-one:1.58
-    ports:
-      - "16686:16686"
+    ports: ["16686:16686"]
     deploy:
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
+    ports: ["9090:9090"]
     deploy:
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
 
   grafana:
     image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
+    ports: ["3000:3000"]
     deploy:
-      # --> Add this label to ignore the service
-      labels:
-        - "traefik.enable=false"
-    networks:
-      - internal
+      labels: [traefik.enable=false]
+    networks: [internal]
