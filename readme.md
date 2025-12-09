@@ -267,3 +267,40 @@ CloudTaskHub est un modèle professionnel pour :
 * travailler en équipe sur une architecture scalable
 
 
+# LINTERS – CODE FORMATTER
+
+1️⃣ Installer pre-commit :
+
+```bash
+pip install pre-commit
+```
+
+2️⃣ Installer les hooks :
+
+```bash
+pre-commit install
+```
+
+Tu verras un message :
+```bash
+pre-commit installed at .git/hooks/pre-commit
+```
+
+3️⃣ Tester tous les hooks sur tout le projet :
+
+```bash
+pre-commit run --all-files
+```
+
+🎁 Ce que ça fait dans ta vie réelle DevOps
+
+✔ Avant chaque git commit,
+→ Ruff vérifie le code
+→ Black reformate
+→ Isort trie les imports
+→ Mypy valide les types
+→ Detect-secrets empêche de commit un token AWS, clé privée, etc.
+→ Yamllint vérifie tes fichiers CI/CD
+
+Si un hook échoue → le commit est bloqué, et tu corriges avant de pousser un code cassé.
+

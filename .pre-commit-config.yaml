@@ -1,0 +1,79 @@
+repos:
+  # -------------------------------------------------------
+  # 1. RUFF → Linter ultra rapide (PEP8 + erreurs de code)
+  # -------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.0
+    hooks:
+      - id: ruff
+        name: Ruff Linter
+        args: ["--fix"]
+      - id: ruff-format
+        name: Ruff Formatter
+
+  # -------------------------------------------------------
+  # 2. BLACK → Formateur strict (très pro)
+  # -------------------------------------------------------
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        name: Black Formatter
+        language_version: python3.11
+
+  # -------------------------------------------------------
+  # 3. ISORT → Ranger les imports
+  # -------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-isort
+    rev: v5.13.2
+    hooks:
+      - id: isort
+        name: Import Sorter
+        args: ["--profile", "black"]
+
+  # -------------------------------------------------------
+  # 4. MYPY → Vérifier les types (non bloquant si erreurs)
+  # -------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: Static Type Checker (Mypy)
+        additional_dependencies: ["pydantic"]
+        args: ["--ignore-missing-imports"]
+
+  # -------------------------------------------------------
+  # 5. Détection de secrets → très pro, protège ton repo
+  # -------------------------------------------------------
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: Detect Secrets
+
+  # -------------------------------------------------------
+  # 6. Vérification YAML → CI/CD propre
+  # -------------------------------------------------------
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+
+  # -------------------------------------------------------
+  # 7. Vérification JSON
+  # -------------------------------------------------------
+  - repo: https://github.com/antonbabenko/pre-commit-json
+    rev: v1.0.0
+    hooks:
+      - id: json-check
+
+  # -------------------------------------------------------
+  # 8. Hooks Git de base → éviter commits invalides
+  # -------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files

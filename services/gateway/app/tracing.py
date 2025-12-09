@@ -1,26 +1,17 @@
-# gateway/app/tracing.py
 from opentelemetry import trace
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 
 def setup_tracing(service_name: str):
-    # Nom du service visible dans Jaeger
-    resource = Resource(attributes={"service.name": service_name})
-
-    # Provider global
-    provider = TracerProvider(resource=resource)
+    provider = TracerProvider(resource=Resource.create({SERVICE_NAME: service_name}))
     trace.set_tracer_provider(provider)
 
-    # Exporter Thrift → compatible 100% avec jaegertracing/all-in-one
-    jaeger_exporter = JaegerExporter(
-        agent_host_name="jaeger",   # ← nom du service dans Docker/Swarm
-        agent_port=6831,            # ← port Thrift (UDP) par défaut
+    otlp_exporter = OTLPSpanExporter(
+        endpoint="http://jaeger:4318/v1/traces",  # HTTP OTLP endpoint
+        insecure=True  # indispensable si HTTPS pas configuré
     )
 
-    processor = BatchSpanProcessor(jaeger_exporter)
-    provider.add_span_processor(processor)
-
-    return trace.get_tracer(service_name)
+    provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
