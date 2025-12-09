@@ -122,7 +122,6 @@ Après déploiement, ajoute ceci dans `/etc/hosts` :
 ```
 
 ### Accès :
-
 * Gateway → [http://gateway.localhost](http://gateway.localhost)
 * Auth → [http://auth.localhost](http://auth.localhost)
 * Monitoring → [http://localhost:3000](http://localhost:3000)
