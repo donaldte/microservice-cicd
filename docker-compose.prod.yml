@@ -27,12 +27,12 @@ services:
       - "--providers.swarm.exposedByDefault=false"  # Ignore les services sans traefik.enable=true
       - "--providers.swarm.network=traefik-public"  # Réseau pour discovery
       - "--entrypoints.web.address=:80"
+      - "--metrics=true"
       - "--metrics.prometheus=true"
       - "--metrics.prometheus.entrypoint=web"
       - "--tracing=true"
       - "--tracing.otlp=true"
       - "--tracing.otlp.http.endpoint=http://jaeger:4318/v1/traces"
-      - "--tracing.otlp.insecure=true"
       - "--log.level=INFO"
       - "--accesslog=true"                     # Bonus : logs des requêtes visibles dans dashboard
     ports:
