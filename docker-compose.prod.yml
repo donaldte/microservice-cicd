@@ -32,7 +32,7 @@ services:
       - "--metrics.prometheus.entrypoint=web"
       - "--tracing=true"
       - "--tracing.otlp=true"
-      - "--tracing.otlp.http.endpoint=http://jaeger:4318/v1/traces"
+      - "--tracing.otlp.http.endpoint=http://jaeger:4328/v2/traces"
       - "--log.level=INFO"
       - "--accesslog=true"                     # Bonus : logs des requêtes visibles dans dashboard
     ports:
@@ -60,7 +60,7 @@ services:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:latest
     deploy:
-      replicas: 1
+      replicas: 3
       labels:
         - "traefik.enable=true"
         # - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
@@ -75,38 +75,38 @@ services:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-auth:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   project-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   billing-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   notification-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   analytics-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   jaeger:
-    image: jaegertracing/all-in-one:1.58
+    image: jaegertracing/all-in-one:2.58
     ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+      - "26686:26686"
+      - "4327:4327"
+      - "4328:4328"
     deploy:
       labels: [traefik.enable=false]
     networks: [internal]
