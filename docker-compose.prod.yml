@@ -58,7 +58,7 @@ services:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-gateway:latest
     deploy:
-      replicas: 1
+      replicas: 3
       labels:
         - "traefik.enable=true"
         # - "traefik.http.routers.gateway.rule=HostRegexp(`{host:.+}`)"
@@ -79,25 +79,25 @@ services:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-project:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   billing-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-billing:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   notification-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-notification:latest
     deploy:
-      replicas: 1
+      replicas: 2
 
   analytics-service:
     <<: *common-microservice
     image: ${DOCKERHUB_USERNAME}/cloudtaskhub-analytics:latest
     deploy:
-      replicas: 1
+      replicas:  2
 
   jaeger:
     image: jaegertracing/all-in-one:1.58
